@@ -1,12 +1,11 @@
 package com.example.background.activities
 
 import android.util.Log
-import com.example.background.Constant
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import com.example.background.Constant.Status
+import com.example.background.utils.Constant.Status
 
 abstract class CoroutinesAsyncTask<Params, Progress, Result>{
 

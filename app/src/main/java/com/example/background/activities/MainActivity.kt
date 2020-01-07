@@ -1,10 +1,9 @@
 package com.example.background.activities
 
-import android.os.AsyncTask
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.view.View
-import com.example.background.Constant.Status
+import com.example.background.utils.Constant.Status
 import kotlinx.android.synthetic.main.activity_main.*
 import com.example.background.R
 

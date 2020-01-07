@@ -1,4 +1,4 @@
-package com.example.background
+package com.example.background.utils
 
 class Constant{
     enum class Status {
