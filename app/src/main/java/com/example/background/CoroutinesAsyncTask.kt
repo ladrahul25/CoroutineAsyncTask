@@ -1,15 +1,23 @@
 package com.example.background
 
 import android.util.Log
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import com.example.background.Constant.Status
+import kotlinx.coroutines.*
+import java.util.concurrent.Executors
 
-abstract class CoroutinesAsyncTask<Params, Progress, Result>{
+abstract class CoroutinesAsyncTask<Params, Progress, Result>(val taskName: String) {
+
+    val TAG by lazy {
+        CoroutinesAsyncTask::class.java.simpleName
+    }
+
+    companion object {
+        private var threadPoolExecutor: CoroutineDispatcher? = null
+    }
 
     var status: Status = Status.PENDING
+    var preJob: Job? = null
+    var bgJob: Deferred<Result>? = null
     abstract fun doInBackground(vararg params: Params?): Result
     open fun onProgressUpdate(vararg values: Progress?) {}
     open fun onPostExecute(result: Result?) {}
@@ -17,7 +25,26 @@ abstract class CoroutinesAsyncTask<Params, Progress, Result>{
     open fun onCancelled(result: Result?) {}
     protected var isCancelled = false
 
-    fun execute(vararg params: Params){
+    /**
+     * Executes background task parallel with other background tasks in the queue using
+     * default thread pool
+     */
+    fun execute(vararg params: Params?) {
+        execute(Dispatchers.Default, *params)
+    }
+
+    /**
+     * Executes background tasks sequentially with other background tasks in the queue using
+     * single thread executor @Executors.newSingleThreadExecutor().
+     */
+    fun executeOnExecutor(vararg params: Params?) {
+        if (threadPoolExecutor == null) {
+            threadPoolExecutor = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
+        }
+        execute(threadPoolExecutor!!, *params)
+    }
+
+    private fun execute(dispatcher: CoroutineDispatcher, vararg params: Params?) {
 
         if (status != Status.PENDING) {
             when (status) {
@@ -25,44 +52,64 @@ abstract class CoroutinesAsyncTask<Params, Progress, Result>{
                 Status.FINISHED -> throw IllegalStateException("Cannot execute task:"
                         + " the task has already been executed "
                         + "(a task can be executed only once)")
+                else -> {
+                }
             }
         }
 
         status = Status.RUNNING
 
         // it can be used to setup UI - it should have access to Main Thread
-        GlobalScope.launch(Dispatchers.Main){
-            onPreExecute()
-        }
-
-        // doInBackground works on background thread(default)
-        GlobalScope.launch(Dispatchers.Default){
-            val result = doInBackground(*params)
-            status = Status.FINISHED
-            withContext(Dispatchers.Main){
-                // onPostExecute works on main thread to show output
-                Log.d("Alpha","after do in back "+status.name+"--"+isCancelled)
-                if (!isCancelled){onPostExecute(result)}
+        GlobalScope.launch(Dispatchers.Main) {
+            preJob = launch(Dispatchers.Main) {
+                printLog("$taskName onPreExecute started")
+                onPreExecute()
+                printLog("$taskName onPreExecute finished")
+                bgJob = async(dispatcher) {
+                    printLog("$taskName doInBackground started")
+                    doInBackground(*params)
+                }
+            }
+            preJob!!.join()
+            if (!isCancelled) {
+                withContext(Dispatchers.Main) {
+                    onPostExecute(bgJob!!.await())
+                    printLog("$taskName doInBackground finished")
+                    status = Status.FINISHED
+                }
             }
         }
     }
 
-    fun cancel(mayInterruptIfRunning : Boolean){
-        isCancelled = true
-        status = Status.FINISHED
-        GlobalScope.launch(Dispatchers.Main){
-            // onPostExecute works on main thread to show output
-            Log.d("Alpha","after cancel "+status.name+"--"+isCancelled)
-            onPostExecute(null)
+    fun cancel(mayInterruptIfRunning: Boolean) {
+        if (preJob == null || bgJob == null) {
+            printLog("$taskName has already been cancelled/finished/not yet started.")
+            return
+        }
+        if (mayInterruptIfRunning || (!preJob!!.isActive && !bgJob!!.isActive)) {
+            isCancelled = true
+            status = Status.FINISHED
+            if (bgJob!!.isCompleted) {
+                GlobalScope.launch(Dispatchers.Main) {
+                    onCancelled(bgJob!!.await())
+                }
+            }
+            preJob?.cancel(CancellationException("PreExecute: Coroutine Task cancelled"))
+            bgJob?.cancel(CancellationException("doInBackground: Coroutine Task cancelled"))
+            printLog("$taskName has been cancelled.")
         }
     }
 
     fun publishProgress(vararg progress: Progress) {
         //need to update main thread
-        GlobalScope.launch(Dispatchers.Main){
-            if (!isCancelled){
+        GlobalScope.launch(Dispatchers.Main) {
+            if (!isCancelled) {
                 onProgressUpdate(*progress)
             }
         }
+    }
+
+    private fun printLog(message: String) {
+        Log.d(TAG, message)
     }
 }

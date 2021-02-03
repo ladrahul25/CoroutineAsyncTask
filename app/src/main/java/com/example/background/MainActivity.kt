@@ -25,7 +25,7 @@ class MainActivity : AppCompatActivity() {
         task?.execute(10)
     }
 
-    class MyAsyncTask(private var activity: MainActivity?) : CoroutinesAsyncTask<Int, Int, String>() {
+    class MyAsyncTask(private var activity: MainActivity?) : CoroutinesAsyncTask<Int, Int, String>("MysAsyncTask") {
 
         override fun doInBackground(vararg params: Int?): String {
             for (count in 1..10){
@@ -43,12 +43,12 @@ class MainActivity : AppCompatActivity() {
 
         override fun onPostExecute(result: String?) {
             activity?.progressBar?.visibility = View.GONE
-            activity?.output?.setText(result)
-            activity?.btn?.setText("Restart")
+            activity?.output?.text = result
+            activity?.btn?.text = "Restart"
         }
 
         override fun onPreExecute() {
-            activity?.output?.setText("Tast starting..")
+            activity?.output?.text = "Tast starting.."
             activity?.progressBar?.visibility = View.VISIBLE
             activity?.progressBar?.max = 10
             activity?.progressBar?.progress = 0
@@ -56,7 +56,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         override fun onProgressUpdate(vararg values: Int?) {
-            activity?.output?.setText("count is ${values.get(0).toString()}")
+            activity?.output?.text = "count is ${values.get(0).toString()}"
             values[0]?.let { activity?.progressBar?.setProgress(it) }
         }
     }
